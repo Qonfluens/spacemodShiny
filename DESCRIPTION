@@ -1,0 +1,25 @@
+Package: spacemodShiny
+Type: Package
+Title: Shiny application of spacemodR models
+Version: 0.0.1
+Authors@R: 
+    person("Virgile", "Baudrot", , "virgile.baudrot@qonfluens.com", role = c("aut", "cre"))
+Maintainer: Virgile Baudrot <virgile.baudrot@qonfluens.com>
+Description: Tools and UI modules to assist with ecological risk assessment. 
+    Includes data input, model fitting, and evaluation components.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    actuar,
+    bslib (>= 0.9.0),
+    DT (>= 0.33),
+    fitdistrplus,
+    leaflet,
+    plotly (>= 4.11.0),
+    readr (>= 2.1.5),
+    shiny (>= 1.11.1),
+    shinycssloaders,
+    spacemodR,
+    terra
+RoxygenNote: 7.3.2
