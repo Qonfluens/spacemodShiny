@@ -43,9 +43,15 @@ app_ui <- function(request) {
         mod_model_ui("mod_model")
       ),
       bslib::nav_panel(
+        title = "Trophic",
+        value = "tab_trophic",
+        icon = icon("diagram-project"), # Trophic
+        mod_trophic_ui("mod_trophic")
+      ),
+      bslib::nav_panel(
         title = "Exposure",
         value = "tab_evaluate",
-        icon = icon("magnifying-glass-chart"), # Analyse
+        icon = icon("magnifying-glass-chart"), # Exposure
         mod_evaluate_ui("mod_evaluate")
       ),
       bslib::nav_panel(
