@@ -4,13 +4,23 @@
 #'
 #' @export
 app_ui <- function(request) {
+
+  # --- Gestion des ressources statiques (CSS/Images) ---
+  path_www <- system.file("app/www", package = "spacemodShiny")
+  if (path_www == "") {
+    path_www <- file.path(getwd(), "inst", "app", "www")
+  }
+  if (dir.exists(path_www)) {
+    shiny::addResourcePath(prefix = "assets", directoryPath = path_www)
+  }
+  # -------------------------------------------------------------------
   ui <- tagList(
     tags$head(
-      tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
+      tags$link(rel = "stylesheet", type = "text/css", href = "assets/custom.css")
     ),
     bslib::page_navbar(
       title = span(
-        # On peut ajouter un logo ici si vous en avez un
+        # On peut ajouter un logo ici
         # tags$img(src = "www/logo.png", height = "30px", style = "margin-right: 10px;"),
         "SPACEMOD"
       ),
@@ -22,7 +32,8 @@ app_ui <- function(request) {
         bootswatch = "zephyr",
         primary="#208a8b",
         "navbar-bg" = "#208a8b", # Barre de nav colorée (plus moderne)
-        "navbar-light-color" = "#ffffff" # Texte blanc sur la navbar
+        "navbar-light-color" = "#ffffff", # Texte blanc sur la navbar
+        font_scale = 0.9 # reduce all font size by 10%
       ),
       # --- 2. REMPLISSAGE (CRUCIAL) ---
       # Permet aux cartes (Map) de prendre toute la hauteur disponible

@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "metaleurop_roi",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "id": null }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 2.969093978685359, 50.420999213552619 ], [ 3.042211126451973, 50.479235200514388 ], [ 3.108326270057636, 50.446296994630643 ], [ 3.034486941621995, 50.390765280327216 ], [ 2.969093978685359, 50.420999213552619 ] ] ] ] } }
+]
+}

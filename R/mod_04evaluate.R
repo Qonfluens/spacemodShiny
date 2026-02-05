@@ -13,7 +13,7 @@ mod_evaluate_ui <- function(id) {
       tags$p("Click below to combine Habitats, Trophic Links, and Ground Concentration into a Space Model."),
       actionButton(
         ns("run_model_btn"),
-        "Run Space Model",
+        "Run Exposure Model",
         icon = icon("play"),
         class = "btn-primary w-100"
       )
@@ -194,6 +194,7 @@ mod_evaluate_server <- function(id, shared_global) {
 
       # 3. Reproject for Leaflet (WGS84)
       r_visu <- terra::project(r_layer, "EPSG:4326")
+      bbox <- as.vector(terra::ext(r_visu))
 
       # --- AJOUT 1 : Préparation du ROI (Contour) ---
       sf_roi_visu <- NULL
@@ -252,7 +253,7 @@ mod_evaluate_server <- function(id, shared_global) {
           position = "bottomright"
         ) |>
         # Zoom sur l'étendue du raster (xmin, ymin, xmax, ymax)
-        leaflet::fitBounds(bbox[1], bbox[3], bbox[2], bbox[4])
+        leaflet::fitBounds(lng1 = bbox[1], lat1 = bbox[3], lng2 = bbox[2], lat2 = bbox[4])
     })
 
     # --------------------------

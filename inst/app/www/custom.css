@@ -1,0 +1,47 @@
+/* Réduction des inputs */
+select.form-select,
+input.form-control {
+  padding: 0.25rem 0.5rem;
+  height: auto;
+  min-height: 30px;
+}
+
+/* Réduction du label */
+label.control-label {
+  margin-bottom: 0.2rem; /* Rapproche le label de l'input */
+  font-weight: 600;
+}
+
+/* custom.css */
+.card {
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Ombre légère pour effet de profondeur */
+  border: none; /* Plus moderne sans bordure grise */
+}
+
+.btn-primary {
+  background-color: #208a8b;
+  border-color: #208a8b;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Style pour la table DT compacte */
+table.dataTable tbody td {
+  padding: 4px 8px !important;
+  font-size: 0.9rem;
+}
+
+/* Force le conteneur du spinner à prendre 100% de la hauteur ET centre le spinner */
+.shiny-spinner-output-container {
+    height: 100% !important;
+    display: flex !important;       /* Active le mode Flexbox */
+    align-items: center;            /* Centre verticalement */
+    justify-content: center;        /* Centre horizontalement */
+}
+
+/* Force le contenu (la carte Leaflet) à prendre 100% quand elle apparaît */
+.shiny-spinner-output-container > div {
+    height: 100% !important;
+    width: 100% !important;         /* Sécurité supplémentaire */
+}

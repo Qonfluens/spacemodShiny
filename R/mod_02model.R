@@ -80,9 +80,14 @@ mod_model_ui <- function(id) {
           )
         ),
         bslib::card_body(
-          class = "p-0", # Full bleed map (remplit toute la carte)
-          # Spinner supprimé pour éviter les conflits de hauteur CSS
-          leaflet::leafletOutput(ns("map_OCSGE"), height = "100%")
+          class = "p-0", # Full bleed map
+          # spinner autour de l'output
+          shinycssloaders::withSpinner(
+            leaflet::leafletOutput(ns("map_OCSGE"), height = "100%"),
+            type = 8,          # Type 8 = Cercles qui tournent (moderne et discret)
+            color = "#208a8b", # Votre couleur "Teal" primaire
+            size = 0.5         # Taille modérée pour ne pas être agressif
+          )
         )
       )
     )
@@ -94,148 +99,185 @@ mod_model_ui <- function(id) {
 mod_model_server <- function(id, shared_global) {
   shiny::moduleServer(id, function(input, output, session) {
 
-    # --------------------------
-    # 1. DATA RETRIEVAL
-    # --------------------------
-    sf_ocsge_ROI_reactive <- reactive({
-      # 1. check the data exist and are validated
-      req(shared_global$sf_ROI)
-      req(shared_global$data_validated)
+      # --------------------------
+      # 1. DATA RETRIEVAL (FULL FGB VERSION)
+      # --------------------------
+      sf_ocsge_ROI_reactive <- reactive({
+        # 1. Vérifications initiales
+        req(shared_global$sf_ROI)
+        req(shared_global$data_validated)
 
-      # 2. init output sf
-      sf_ocsge <- NULL
+        sf_ocsge <- NULL
 
-      # Définition manuelle de la référence pour garantir l'affichage
-      ref_ocsge <- spacemodR::ref_ocsge
+        # Référence pour les codes couleurs/noms (Essentiel !)
+        ref_ocsge <- spacemodR::ref_ocsge
 
-      # Gestion du cas "Exemple" (Metaleurop) - Pas d'appel API
-      if (!is.null(shared_global$try) && shared_global$try == "metaleurop") {
-        sf_ocsge <- DATA_TRY[["ocsge_metaleurop"]]
-      } else {
-        # Cas Normal : Appel API Géoportail avec barre de progression
-        shiny::withProgress(
-          message = 'Contacting Geoportail API...',
-          detail = 'Downloading OCS-GE data (this may take a minute)...',
-          value = 0.5,
-          {
-            tryCatch({
-              url_fgb <- "https://spacemod-ocsge.s3.fr-par.scw.cloud/ocsge_france.fgb"
-              sf_ocsge <- spacemodR::get_ocsge_data_fgb(shared_global$sf_ROI, url_fgb)
-              # sf_ocsge <- spacemodR::get_ocsge_data(shared_global$sf_ROI)
-              sf_ocsge
-            }, error = function(e) {
-              showNotification(paste("API Error:", e$message), type = "error", duration = 10)
-              return(NULL)
-            })
+        # 2. Récupération des données
+        # Cas "Exemple" (Metaleurop)
+        if (!is.null(shared_global$try) && shared_global$try == "metaleurop") {
+          sf_ocsge <- DATA_TRY[["ocsge_metaleurop"]]
+        } else {
+          # Cas Normal : Lecture optimisée du FlatGeobuf sur S3
+          shiny::withProgress(
+            message = 'Loading OCS-GE Data...',
+            detail = 'Connect to Qonfluens API (may take > 1 minute) ...',
+            value = 0.3,
+            {
+              tryCatch({
+                # Configuration GDAL pour la robustesse réseau
+                Sys.setenv(
+                  GDAL_HTTP_TIMEOUT = "30",
+                  GDAL_HTTP_MAX_RETRY = "3",
+                  GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
+                )
+
+                url_fgb <- "https://spacemod-ocsge.s3.fr-par.scw.cloud/ocsge_france.fgb"
+                vsicurl_url <- paste0("/vsicurl/", url_fgb)
+
+                # Filtre spatial (Projection Lambert 93 / 2154 pour l'interrogation)
+                roi_filter <- shared_global$sf_ROI
+                if (sf::st_crs(roi_filter)$epsg != 2154) {
+                  roi_filter <- sf::st_transform(roi_filter, 2154)
+                }
+                wkt_geom <- sf::st_as_text(sf::st_geometry(roi_filter))
+
+                # Lecture partielle via GDAL
+                sf_subset <- sf::read_sf(vsicurl_url, wkt_filter = wkt_geom)
+
+                if (nrow(sf_subset) > 0) {
+                  # Découpage propre selon le ROI exact
+                  sf_ocsge <- sf::st_intersection(sf_subset, roi_filter)
+                }
+
+                sf_ocsge
+
+              }, error = function(e) {
+                showNotification(paste("Erreur API/FGB:", e$message), type = "error", duration = 10)
+                return(NULL)
+              })
+            }
+          )
+        }
+
+        # 3. Nettoyage et Jointure (Si des données ont été trouvées)
+        if (!is.null(sf_ocsge) && nrow(sf_ocsge) > 0) {
+
+          # Normalisation des noms de colonnes (parfois en majuscules dans le FGB)
+          col_names <- names(sf_ocsge)
+          if ("CODE_CS" %in% col_names && !"code_cs" %in% col_names) {
+            names(sf_ocsge)[names(sf_ocsge) == "CODE_CS"] <- "code_cs"
           }
-        )
-      }
 
-      # 4. Jointure avec la référence (Si on a récupéré des données)
-      if (!is.null(sf_ocsge)) {
-        # Normalisation du nom de colonne pour la jointure
-        if ("CODE_CS" %in% names(sf_ocsge) && !"code_cs" %in% names(sf_ocsge)) {
-          names(sf_ocsge)[names(sf_ocsge) == "CODE_CS"] <- "code_cs"
+          # Jointure avec la table de référence (pour avoir 'couleur' et 'nomenclature')
+          # On ne le fait que si 'code_cs' existe
+          if ("code_cs" %in% names(sf_ocsge)) {
+            sf_ocsge <- merge(sf_ocsge, ref_ocsge, by = "code_cs", all.x = TRUE)
+          }
+
+          # --- LE BOUT DE CODE QUE VOUS VOULIEZ RAJOUTER ---
+          # Gestion des codes inconnus / manquants
+          if ("couleur" %in% names(sf_ocsge)) {
+            sf_ocsge$couleur[is.na(sf_ocsge$couleur)] <- "#808080" # Gris par défaut
+          }
+          if ("nomenclature" %in% names(sf_ocsge)) {
+            sf_ocsge$nomenclature[is.na(sf_ocsge$nomenclature)] <- "Unknown"
+          }
         }
 
-        # Jointure
-        sf_ocsge <- merge(sf_ocsge, ref_ocsge, by = "code_cs", all.x = TRUE)
+        return(sf_ocsge)
+      })
 
-        # Gestion des codes inconnus / manquants
-        if ("couleur" %in% names(sf_ocsge)) {
-          sf_ocsge$couleur[is.na(sf_ocsge$couleur)] <- "#808080" # Gris par défaut
+      # Mise à jour de l'objet global une fois les données reçues
+      observeEvent(sf_ocsge_ROI_reactive(), {
+        # On stocke le résultat propre dans shared_global
+        shared_global$sf_ocsge_ROI <- sf_ocsge_ROI_reactive()
+      })
+
+      # --------------------------
+      # 2. OUTPUTS (Summary & Map)
+      # --------------------------
+
+      # Résumé textuel
+      output$ocsge_summary <- renderPrint({
+        req(sf_ocsge_ROI_reactive())
+        summary(sf_ocsge_ROI_reactive())
+      })
+
+      # Carte Leaflet (Version classique sans JS externe)
+      output$map_OCSGE <- leaflet::renderLeaflet({
+        req(sf_ocsge_ROI_reactive())
+
+        # Récupération des données nettoyées
+        data_map <- sf_ocsge_ROI_reactive()
+
+        # Sécurité : Si vide, on ne plante pas, on renvoie une carte vide
+        if (nrow(data_map) == 0) return(leaflet::leaflet() |> leaflet::addTiles())
+
+        # Transformation WGS84 pour l'affichage Leaflet
+        if (sf::st_crs(data_map)$epsg != 4326) {
+          data_map <- sf::st_transform(data_map, 4326)
         }
-        if ("nomenclature" %in% names(sf_ocsge)) {
-          sf_ocsge$nomenclature[is.na(sf_ocsge$nomenclature)] <- "Unknown"
-        }
-      }
-      return(sf_ocsge)
-    })
 
-    # Mise à jour de l'objet global une fois les données reçues
-    observeEvent(sf_ocsge_ROI_reactive(), {
-      shared_global$sf_ocsge_ROI <- sf_ocsge_ROI_reactive()
-    })
+        # Préparation de la légende
+        # (On utilise data_map qui contient maintenant les couleurs grâce au merge ci-dessus)
+        df_legend <- sf::st_drop_geometry(data_map)
 
-    # --------------------------
-    # 2. OUTPUTS (Summary & Map)
-    # --------------------------
-    output$ocsge_summary <- renderPrint({
-      req(sf_ocsge_ROI_reactive())
-      summary(sf_ocsge_ROI_reactive())
-    })
+        # Sécurité si merge raté
+        if (!"couleur" %in% names(df_legend)) df_legend$couleur <- "#0073B7"
+        if (!"nomenclature" %in% names(df_legend)) df_legend$nomenclature <- "N/A"
 
-    output$map_OCSGE <- leaflet::renderLeaflet({
-      req(sf_ocsge_ROI_reactive())
-      data_map <- sf_ocsge_ROI_reactive()
+        df_legend <- unique(df_legend[, c("nomenclature", "couleur")])
+        df_legend <- df_legend[!is.na(df_legend$nomenclature), ]
+        df_legend <- df_legend[order(df_legend$nomenclature), ]
 
-      # Si les colonnes manquent (cas rare), on évite le crash
-      if (!"couleur" %in% names(data_map)) data_map$couleur <- "#0073B7"
-      if (!"nomenclature" %in% names(data_map)) data_map$nomenclature <- "N/A"
+        # Construction de la carte
+        leaflet::leaflet(data_map) |>
+          leaflet::addTiles() |>
+          leaflet::addPolygons(
+            fillColor = ~couleur,
+            color = "white",
+            weight = 0.5,
+            opacity = 1,
+            fillOpacity = 0.7,
+            popup = ~paste("<b>Code:</b>", as.character(code_cs),
+                           "<br><b>Libelle:</b>", as.character(nomenclature))
+          ) |>
+          leaflet::addLegend(
+            position = "bottomright",
+            colors = df_legend$couleur,
+            labels = df_legend$nomenclature,
+            title = "OCS-GE",
+            opacity = 1
+          )
+      })
 
-      # Sécurité WGS84
-      if (sf::st_crs(data_map)$epsg != 4326) {
-        data_map <- sf::st_transform(data_map, 4326)
-      }
-
-      # --- PRÉPARATION DE LA LÉGENDE ---
-      df_legend <- sf::st_drop_geometry(data_map)
-      df_legend <- unique(df_legend[, c("nomenclature", "couleur")])
-      df_legend <- df_legend[!is.na(df_legend$nomenclature), ]
-      df_legend <- df_legend[order(df_legend$nomenclature), ]
-
-      # --- CARTE ---
-      leaflet::leaflet(data_map) |>
-        leaflet::addTiles() |>
-        leaflet::addPolygons(
-          fillColor = ~couleur,
-          color = "white",
-          weight = 1,
-          opacity = 1,
-          fillOpacity = 0.7,
-          popup = ~paste("<b>Code:</b>", as.character(code_cs),
-                         "<br><b>Libelle:</b>", as.character(nomenclature))
-        ) |>
-        leaflet::addLegend(
-          position = "bottomright",
-          colors = df_legend$couleur,
-          labels = df_legend$nomenclature,
-          title = "OCS-GE",
-          opacity = 1
-        )
-    })
-
-    # --------------------------
     # 3. HABITATS MANAGEMENT (ADD/REMOVE TABLE)
     # --------------------------
     # A. Mise à jour des choix de codes CS avec Nomenclature
     observeEvent(sf_ocsge_ROI_reactive(), {
       data <- sf_ocsge_ROI_reactive()
+
+      # Si data est NULL ou vide (0 lignes), on ne fait RIEN.
       req(data)
+      if (nrow(data) == 0) return()
+      # ----------------------------------
 
       # Vérification des colonnes nécessaires
       if ("code_cs" %in% names(data) && "nomenclature" %in% names(data)) {
 
-        # 1. On extrait les couples uniques Code + Nomenclature
-        # st_drop_geometry accélère le traitement en ignorant la géométrie
+        # ... Reste de votre code inchangé ...
         df_unique <- unique(sf::st_drop_geometry(data)[, c("code_cs", "nomenclature")])
-
-        # 2. On trie par code pour que ce soit propre
         df_unique <- df_unique[order(df_unique$code_cs), ]
 
-        # 3. Création du Vecteur Nommé pour l'UX
-        # Format : "CS 1.1.1 - Zones bâties" (Visible) = "CS 1.1.1" (Valeur interne)
+        # C'est ici que ça plantait avant :
         labels <- paste(df_unique$code_cs, "-", df_unique$nomenclature)
         choices_vec <- setNames(df_unique$code_cs, labels)
 
-        # 4. Mise à jour du widget
         updateSelectizeInput(
           session,
           "new_hab_codes",
-          choices = choices_vec,
-          server = TRUE # Garde la performance si beaucoup de codes
-        )
-      } else if ("code_cs" %in% names(data)) {
+          choices = choices_vec, server = TRUE)
+      }  else if ("code_cs" %in% names(data)) {
         # Fallback si pas de nomenclature : on affiche juste les codes
         codes <- sort(unique(data$code_cs))
         updateSelectizeInput(session, "new_hab_codes", choices = codes, server = TRUE)
