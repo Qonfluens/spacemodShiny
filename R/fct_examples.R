@@ -7,6 +7,6 @@ DATA_TRY <- list(
   ocsge_metaleurop = spacemodR::ocsge_metaleurop,
   # Pour le raster, on stocke une FONCTION qui le chargera au moment voulu
   get_ground_cd = function() {
-    spacemodR::load_raster_extdata("ground_concentration_cd.tif")
+    spacemodR::load_raster_extdata("ground_concentration_cd_compressed.tif")
   }
 )

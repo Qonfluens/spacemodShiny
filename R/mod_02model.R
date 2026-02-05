@@ -119,7 +119,9 @@ mod_model_server <- function(id, shared_global) {
           value = 0.5,
           {
             tryCatch({
-              sf_ocsge <- spacemodR::get_ocsge_data(shared_global$sf_ROI)
+              url_fgb <- "https://spacemod-ocsge.s3.fr-par.scw.cloud/ocsge_france.fgb"
+              sf_ocsge <- spacemodR::get_ocsge_data_fgb(shared_global$sf_ROI, url_fgb)
+              # sf_ocsge <- spacemodR::get_ocsge_data(shared_global$sf_ROI)
               sf_ocsge
             }, error = function(e) {
               showNotification(paste("API Error:", e$message), type = "error", duration = 10)
